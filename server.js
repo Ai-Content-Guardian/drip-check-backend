@@ -45,17 +45,50 @@ app.options('*', cors());
 const rateLimits = new Map();
 const RATE_LIMIT = 50; // requests per day per user
 
-// Premium check (integrate with ExtensionPay)
-async function checkPremium(userId) {
-  // TODO: Integrate with ExtensionPay API
-  // For now, return true for testing
-  return true;
+// Premium users cache (in production, use Redis or a database)
+const premiumUsersCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Premium check with ExtensionPay
+async function checkPremium(userId, premiumToken) {
+  if (!userId || typeof userId !== 'string') {
+    return false;
+  }
+  
+  // Check cache first
+  const cached = premiumUsersCache.get(userId);
+  if (cached && cached.expires > Date.now()) {
+    return cached.isPremium;
+  }
+  
+  // For ExtensionPay, we rely on client-side verification
+  // The extension sends a premium token (timestamp) when user is verified as premium
+  if (premiumToken) {
+    const tokenAge = Date.now() - parseInt(premiumToken);
+    // Token is valid for 10 minutes
+    if (tokenAge < 10 * 60 * 1000) {
+      // Cache the premium status
+      premiumUsersCache.set(userId, {
+        isPremium: true,
+        expires: Date.now() + CACHE_DURATION
+      });
+      return true;
+    }
+  }
+  
+  // Cache non-premium status
+  premiumUsersCache.set(userId, {
+    isPremium: false,
+    expires: Date.now() + CACHE_DURATION
+  });
+  
+  return false;
 }
 
 // Main humanization endpoint
 app.post('/api/humanize', async (req, res) => {
   try {
-    const { text, userId, currentScore } = req.body;
+    const { text, userId, currentScore, premiumToken } = req.body;
     
     if (!text || !userId) {
       return res.status(400).json({ 
@@ -65,7 +98,7 @@ app.post('/api/humanize', async (req, res) => {
     }
     
     // Check premium status
-    const isPremium = await checkPremium(userId);
+    const isPremium = await checkPremium(userId, premiumToken);
     if (!isPremium) {
       return res.status(403).json({ 
         success: false, 
