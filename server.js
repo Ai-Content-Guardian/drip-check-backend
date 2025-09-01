@@ -16,10 +16,30 @@ const anthropic = new Anthropic({
 
 // Middleware
 app.use(cors({
-  origin: ['chrome-extension://*', 'http://localhost:*'],
-  credentials: true
+  origin: function(origin, callback) {
+    // Allow requests from LinkedIn, Chrome extensions, and localhost
+    const allowedOrigins = [
+      'https://www.linkedin.com',
+      'https://linkedin.com',
+      'http://localhost:3000',
+      'http://localhost:5000'
+    ];
+    
+    // Allow Chrome extension requests (no origin) and allowed origins
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith('chrome-extension://')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Handle preflight requests
+app.options('*', cors());
 
 // Rate limiting (simple in-memory version)
 const rateLimits = new Map();
