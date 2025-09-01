@@ -102,18 +102,20 @@ Guidelines:
 - Make it conversational but keep the same meaning
 - Turn abstract concepts into simpler explanations
 - Fix the "LinkedIn voice" (starting with "Thrilled to announce", "Grateful for", etc.)
+- Don't add commentary or meta-observations about the content
+- Keep the tone confident and direct, just more human
 - Keep any specific details, numbers, or important information
 - Aim for 80%+ humanity score
 
 IMPORTANT: 
 1. Do NOT add new stories, examples, or details that weren't in the original
 2. Do NOT change the fundamental message
-3. Return ONLY the cleaned up post text
+3. Return ONLY the cleaned up post text - no introductions like "Here's a cleaned up version"
+4. Use proper paragraph breaks for readability, but don't add extra blank lines
+5. Keep it concise - don't make it longer than the original
 
 Original post to humanize:
-${text}
-
-Cleaned up version:`;
+${text}`;
     
     // Call Claude
     const completion = await anthropic.messages.create({
