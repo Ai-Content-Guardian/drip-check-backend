@@ -85,33 +85,39 @@ app.post('/api/humanize', async (req, res) => {
     rateLimits.set(userKey, currentCount + 1);
     
     // Create the humanization prompt for Claude
-    const prompt = `Rewrite this LinkedIn post to score 80%+ on a humanity scale. Current score: ${currentScore}% (100% = perfectly human, 0% = corporate robot).
+    const prompt = `Task: Rewrite this LinkedIn post to sound more human (80%+ humanity score).
 
-Original post:
+Current post (${currentScore}% human):
 ${text}
 
-Rewrite for 80%+ humanity score by:
-1. Replace buzzwords (momentum, transformation, flywheel, leverage, synergy) with simple words
-2. Remove formatting tricks (arrows, em dashes, excessive emojis)
-3. Combine short sentences into natural paragraphs
-4. Write like you're talking to a friend over coffee
-5. Keep all facts and core message the same
-6. Make it the same length or shorter
+Rules:
+- Replace corporate buzzwords with simple words
+- Remove excessive formatting (arrows, em dashes, too many emojis)
+- Write conversationally, like talking to a friend
+- Keep the same facts and message
+- Same length or shorter
 
-Start your response with the first sentence of the rewritten post. Output only the rewritten post text.`;
+Output the rewritten post starting with the first word of your revision.`;
     
-    // Call Claude
+    // Call Claude with response prefilling
     const completion = await anthropic.messages.create({
       model: 'claude-3-haiku-20240307',
       max_tokens: 1000,
       temperature: 0.7,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        },
+        {
+          role: 'assistant',
+          content: 'I'  // Start Claude's response to prevent intro text
+        }
+      ]
     });
     
-    const humanizedText = completion.content[0].text;
+    // Get the text and prepend the prefilled "I"
+    const humanizedText = 'I' + completion.content[0].text;
     
     // Track usage for analytics
     console.log(`Humanization request: User ${userId}, Input: ${text.length} chars, Output: ${humanizedText.length} chars`);
