@@ -85,37 +85,20 @@ app.post('/api/humanize', async (req, res) => {
     rateLimits.set(userKey, currentCount + 1);
     
     // Create the humanization prompt for Claude
-    const prompt = `You are an expert at making LinkedIn posts sound more authentic and human. The post below scored ${currentScore}% on a humanity scale (100% = perfectly human, 0% = peak corporate cringe).
+    const prompt = `Rewrite this LinkedIn post to score 80%+ on a humanity scale. Current score: ${currentScore}% (100% = perfectly human, 0% = corporate robot).
 
-Your task: Clean up and rewrite this LinkedIn post to sound more human while preserving the original message and content.
+Original post:
+${text}
 
-Guidelines:
-- KEEP the same core message, facts, and announcements - don't add new information
-- Remove corporate buzzwords (momentum, transformation, flywheel, synergy, leverage, disrupt, compounding, etc.)
-- Replace business jargon with plain English
-- Remove LinkedIn formatting tricks:
-  • Em dashes (—) → use commas or periods instead
-  • Arrows (→, ≫, ➔) → remove completely
-  • Excessive emojis → keep 1 MAX, only if it adds value
-  • Single sentence paragraphs → combine into natural paragraphs
-  • ALL CAPS words → use normal case (BUT keep legitimate acronyms like AI, CEO, ROI, B2B in caps)
-- Make it conversational but keep the same meaning
-- Turn abstract concepts into simpler explanations
-- Fix the "LinkedIn voice" (starting with "Thrilled to announce", "Grateful for", etc.)
-- Don't add commentary or meta-observations about the content
-- Keep the tone confident and direct, just more human
-- Keep any specific details, numbers, or important information
-- Aim for 80%+ humanity score
+Rewrite for 80%+ humanity score by:
+1. Replace buzzwords (momentum, transformation, flywheel, leverage, synergy) with simple words
+2. Remove formatting tricks (arrows, em dashes, excessive emojis)
+3. Combine short sentences into natural paragraphs
+4. Write like you're talking to a friend over coffee
+5. Keep all facts and core message the same
+6. Make it the same length or shorter
 
-IMPORTANT: 
-1. Do NOT add new stories, examples, or details that weren't in the original
-2. Do NOT change the fundamental message
-3. Return ONLY the cleaned up post text - no introductions like "Here's a cleaned up version"
-4. Use proper paragraph breaks for readability, but don't add extra blank lines
-5. Keep it concise - don't make it longer than the original
-
-Original post to humanize:
-${text}`;
+Start your response with the first sentence of the rewritten post. Output only the rewritten post text.`;
     
     // Call Claude
     const completion = await anthropic.messages.create({
