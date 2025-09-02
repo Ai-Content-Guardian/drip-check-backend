@@ -9,6 +9,15 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Initialize database
+const { 
+  initializeDatabase, 
+  checkUserPremium, 
+  upsertUser, 
+  createPayment,
+  logUsage 
+} = require('./database');
+
 // Initialize Claude
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -61,28 +70,16 @@ async function checkPremium(userId, premiumToken) {
     return cached.isPremium;
   }
   
-  // For ExtensionPay, we rely on client-side verification
-  // The extension sends a premium token (timestamp) when user is verified as premium
-  if (premiumToken) {
-    const tokenAge = Date.now() - parseInt(premiumToken);
-    // Token is valid for 10 minutes
-    if (tokenAge < 10 * 60 * 1000) {
-      // Cache the premium status
-      premiumUsersCache.set(userId, {
-        isPremium: true,
-        expires: Date.now() + CACHE_DURATION
-      });
-      return true;
-    }
-  }
+  // Check database for premium status
+  const isPremium = await checkUserPremium(userId);
   
-  // Cache non-premium status
+  // Cache the result
   premiumUsersCache.set(userId, {
-    isPremium: false,
+    isPremium: isPremium,
     expires: Date.now() + CACHE_DURATION
   });
   
-  return false;
+  return isPremium;
 }
 
 // Main humanization endpoint
@@ -155,6 +152,14 @@ Output the rewritten post starting with the first word of your revision.`;
     // Track usage for analytics
     console.log(`Humanization request: User ${userId}, Input: ${text.length} chars, Output: ${humanizedText.length} chars`);
     
+    // Log usage to database
+    await logUsage(userId, 'humanize', {
+      inputLength: text.length,
+      outputLength: humanizedText.length,
+      score: currentScore,
+      isPremium: isPremium
+    });
+    
     res.json({
       success: true,
       humanizedText: humanizedText,
@@ -174,14 +179,88 @@ Output the rewritten post starting with the first word of your revision.`;
   }
 });
 
+// ExtensionPay webhook endpoint
+app.post('/webhook/extensionpay', async (req, res) => {
+  console.log('Webhook received:', req.body);
+  
+  const { event, data } = req.body;
+  
+  // Verify webhook signature if provided by ExtensionPay
+  // const signature = req.headers['x-extensionpay-signature'];
+  // if (!verifyWebhookSignature(req.body, signature, process.env.EXTENSIONPAY_SECRET)) {
+  //   return res.status(401).send('Invalid signature');
+  // }
+  
+  try {
+    switch (event) {
+      case 'subscription.created':
+      case 'subscription.trial_started':
+        await upsertUser(
+          data.user_id || data.email, // ExtensionPay may use email as ID
+          data.email,
+          'active',
+          data.subscription_id || data.id
+        );
+        await createPayment(
+          data.user_id || data.email,
+          data.amount || 499, // $4.99 in cents
+          data.currency || 'usd',
+          'succeeded',
+          data.payment_id || data.id
+        );
+        console.log(`Premium activated for user: ${data.email}`);
+        break;
+        
+      case 'subscription.deleted':
+      case 'subscription.cancelled':
+        await upsertUser(
+          data.user_id || data.email,
+          data.email,
+          'cancelled',
+          data.subscription_id || data.id
+        );
+        console.log(`Premium cancelled for user: ${data.email}`);
+        break;
+        
+      case 'subscription.updated':
+        // Handle subscription updates (like payment method changes)
+        await upsertUser(
+          data.user_id || data.email,
+          data.email,
+          data.status || 'active',
+          data.subscription_id || data.id
+        );
+        break;
+        
+      case 'payment.succeeded':
+        await createPayment(
+          data.user_id || data.email,
+          data.amount,
+          data.currency || 'usd',
+          'succeeded',
+          data.payment_id || data.id
+        );
+        break;
+    }
+    
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).send('Error processing webhook');
+  }
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'drip-check-api' });
 });
 
-// Start server
-app.listen(PORT, () => {
+// Start server and initialize database
+app.listen(PORT, async () => {
   console.log(`Drip Check API running on port ${PORT}`);
+  
+  // Initialize database tables
+  await initializeDatabase();
 });
 
 // Clean up rate limits every hour
